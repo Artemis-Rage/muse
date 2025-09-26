@@ -1,5 +1,7 @@
 # muse
 
+[View the live site on GitHub Pages](https://artemis-rage.github.io/muse/)
+
 A modern, interactive 3D asset gallery for the web. Built with [Three.js](https://threejs.org/) and [Tailwind CSS](https://tailwindcss.com/), muse allows you to showcase, annotate, and explore 3D models in a beautiful, responsive interface.
 
 ## Features
