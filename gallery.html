@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Asset Gallery</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .viewer-card {
+            display: flex;
+            flex-direction: column;
+            height: 450px;
+        }
+        .viewer-container {
+            flex-grow: 1;
+            position: relative;
+            background-color: #1f2937;
+            border-radius: 0.5rem;
+            min-height: 200px;
+            overflow: hidden;
+        }
+        .viewer-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .annotation-callout {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background-color: rgba(17, 24, 39, 0.9);
+            color: #d1d5db;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #4b5563;
+            max-width: 250px;
+            font-size: 0.875rem;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            opacity: 0;
+            z-index: 10;
+        }
+        .annotation-connector {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9;
+            visibility: hidden;
+            overflow: visible;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 p-4 sm:p-6 lg:p-8">
+
+    <div class="max-w-7xl mx-auto mb-8">
+        <h1 class="text-4xl font-bold text-white text-center">3D Asset Gallery</h1>
+        <p class="text-lg text-gray-400 text-center mt-2">A curated collection of 3D models.</p>
+    </div>
+
+    <div id="gallery-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <!-- Viewer instances will be injected here by JavaScript -->
+    </div>
+
+    <!-- Fullscreen Modal for Expanded View -->
+    <div id="fullscreen-modal" class="hidden fixed inset-0 bg-gray-900 z-50 flex flex-col">
+        <div class="flex-shrink-0 p-4 flex justify-end">
+            <button id="back-to-gallery" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                Back to Gallery
+            </button>
+        </div>
+        <div id="fullscreen-container" class="w-full flex-grow relative flex"></div>
+        <div id="fullscreen-info" class="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 via-black/50 to-transparent pointer-events-none">
+            <h2 id="fullscreen-title" class="text-2xl font-bold text-white"></h2>
+            <p id="fullscreen-description" class="text-base text-gray-300 mt-1"></p>
+        </div>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+        // --- CONFIGURE YOUR ASSET DIRECTORIES HERE ---
+        // The gallery will be populated by looking for subdirectories with these names inside the 'assets/' folder.
+        // The viewers will be populated in this order.
+        const assetDirectoryNames = [
+            'cubic_explosion',
+        ];
+
+        const galleryGrid = document.getElementById('gallery-grid');
+
+        class AssetViewer {
+            constructor(containerElement, id) {
+                this.container = containerElement;
+                this.id = id;
+                this.currentObject = null;
+                this.annotations = [];
+                this.annotationSpheres = [];
+                this.modelSize = 1;
+                this.isCalloutVisible = false;
+                this.isDragging = false;
+                this.createDOM();
+                this.init();
+                this.addEventListeners();
+                this.animate();
+            }
+
+            createDOM() {
+                this.viewerContainer = document.createElement('div');
+                this.viewerContainer.className = 'viewer-container';
+                this.annotationCallout = document.createElement('div');
+                this.annotationCallout.className = 'annotation-callout';
+                this.viewerContainer.appendChild(this.annotationCallout);
+                this.connectorSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                this.connectorSVG.classList.add('annotation-connector');
+                this.connectorLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                this.connectorLine.setAttribute('stroke', 'rgba(107, 114, 128, 0.7)');
+                this.connectorLine.setAttribute('stroke-width', '2');
+                this.connectorSVG.appendChild(this.connectorLine);
+                this.viewerContainer.appendChild(this.connectorSVG);
+
+                const infoContainer = document.createElement('div');
+                infoContainer.className = 'p-4';
+                this.titleEl = document.createElement('h3');
+                this.titleEl.className = 'text-lg font-bold text-white truncate';
+                this.titleEl.textContent = `Asset Slot ${this.id + 1}`;
+                this.descriptionEl = document.createElement('p');
+                this.descriptionEl.className = 'text-sm text-gray-400 h-10 overflow-hidden';
+                this.descriptionEl.textContent = '...';
+                
+                const controlsContainer = document.createElement('div');
+                controlsContainer.className = 'flex gap-2 mt-3 items-center';
+                this.expandBtn = document.createElement('button');
+                this.expandBtn.className = 'file-input-label bg-cyan-600 hover:bg-cyan-500 text-white ml-auto';
+                this.expandBtn.textContent = 'Expand';
+                controlsContainer.appendChild(this.expandBtn);
+
+                infoContainer.appendChild(this.titleEl);
+                infoContainer.appendChild(this.descriptionEl);
+                infoContainer.appendChild(controlsContainer);
+
+                this.container.appendChild(this.viewerContainer);
+                this.container.appendChild(infoContainer);
+            }
+            
+            init() {
+                // (Initialization logic remains the same)
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1f2937);
+                this.camera = new THREE.PerspectiveCamera(75, this.viewerContainer.clientWidth / this.viewerContainer.clientHeight, 0.1, 1000);
+                this.camera.position.set(0, 5, 10);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+                this.renderer.setSize(this.viewerContainer.clientWidth, this.viewerContainer.clientHeight);
+                this.renderer.domElement.className = 'viewer-canvas';
+                this.viewerContainer.appendChild(this.renderer.domElement);
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
+                this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+                directionalLight.position.set(10, 10, 10);
+                this.scene.add(directionalLight);
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                new ResizeObserver(() => this.onWindowResize()).observe(this.viewerContainer);
+            }
+
+            addEventListeners() {
+                this.expandBtn.addEventListener('click', () => this.expand());
+                this.renderer.domElement.addEventListener('click', this.onCanvasClick);
+                this.controls.addEventListener('start', () => {
+                    this.isDragging = false;
+                    this.hideAnnotationCallout();
+                });
+                this.controls.addEventListener('change', () => { this.isDragging = true; });
+            }
+
+            async loadFromDirectory(dirName) {
+                const basePath = `assets/${dirName}`;
+                try {
+                    this.descriptionEl.textContent = 'Loading info...';
+                    // Fetch markdown files first
+                    const titleResponse = await fetch(`${basePath}/title.md`);
+                    if (!titleResponse.ok) throw new Error(`'title.md' not found`);
+                    const title = await titleResponse.text();
+
+                    const descResponse = await fetch(`${basePath}/description.md`);
+                    if (!descResponse.ok) throw new Error(`'description.md' not found`);
+                    const description = await descResponse.text();
+
+                    this.titleEl.textContent = title.trim();
+                    this.descriptionEl.textContent = description.trim();
+                    
+                    // Now load the 3D model
+                    this.descriptionEl.textContent = 'Loading model...';
+                    const mtlPath = `${basePath}/model.mtl`;
+                    const objPath = `${basePath}/model.obj`;
+                    this.loadAssetFromURLs({ obj: objPath, mtl: mtlPath });
+
+                } catch (error) {
+                    this.titleEl.textContent = `Slot ${this.id + 1}: Error`;
+                    this.descriptionEl.textContent = `Failed to load asset from '${dirName}'. Check console.`;
+                    console.error(`Error loading asset from directory '${dirName}':`, error.message);
+                }
+            }
+
+            loadAssetFromURLs({ obj, mtl }) {
+                this.clearAnnotations();
+                if (this.currentObject) this.scene.remove(this.currentObject);
+
+                const manager = new THREE.LoadingManager();
+                const mtlLoader = new MTLLoader(manager);
+                const objLoader = new OBJLoader(manager);
+
+                const mtlURL = new URL(mtl, window.location.href).href;
+                const objURL = new URL(obj, window.location.href).href;
+
+                const resourcePath = mtlURL.substring(0, mtlURL.lastIndexOf('/') + 1);
+                mtlLoader.setPath(resourcePath);
+                
+                mtlLoader.load(mtlURL, (materials) => {
+                    materials.preload();
+                    objLoader.setMaterials(materials);
+                    objLoader.load(objURL, (object) => {
+                        this.currentObject = object;
+                        this.frameObject(object);
+                        this.scene.add(object);
+                        this.createRandomAnnotations(object, 3);
+                        this.descriptionEl.textContent = this.descriptionEl.textContent; // Keep loaded description
+                    }, null, (error) => { throw new Error('model.obj could not be loaded.'); });
+                }, null, (error) => { throw new Error('model.mtl could not be loaded, or it references a missing texture.'); });
+            }
+            
+            expand() {
+                // (Expand/collapse logic remains the same)
+                const fullscreenContainer = document.getElementById('fullscreen-container');
+                const fullscreenModal = document.getElementById('fullscreen-modal');
+                const fsTitle = document.getElementById('fullscreen-title');
+                const fsDesc = document.getElementById('fullscreen-description');
+                fsTitle.textContent = this.titleEl.textContent;
+                fsDesc.textContent = this.descriptionEl.textContent;
+                fullscreenContainer.appendChild(this.viewerContainer);
+                fullscreenModal.classList.remove('hidden');
+                galleryGrid.classList.add('hidden');
+                window.currentlyExpandedViewer = this;
+                this.setAnnotationSpheresVisible(true);
+                setTimeout(() => this.onWindowResize(), 50);
+            }
+
+            collapse() {
+                const fullscreenModal = document.getElementById('fullscreen-modal');
+                this.container.insertBefore(this.viewerContainer, this.container.firstChild);
+                fullscreenModal.classList.add('hidden');
+                galleryGrid.classList.remove('hidden');
+                this.setAnnotationSpheresVisible(false);
+                this.hideAnnotationCallout();
+                setTimeout(() => this.onWindowResize(), 50);
+            }
+
+            frameObject(object) {
+                // (Framing logic remains the same)
+                const box = new THREE.Box3().setFromObject(object);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                this.modelSize = Math.max(size.x, size.y, size.z);
+                const fov = this.camera.fov * (Math.PI / 180);
+                let cameraZ = Math.abs(this.modelSize / 2 / Math.tan(fov / 2)) * 1.8;
+                this.camera.position.copy(center);
+                this.camera.position.z += cameraZ;
+                this.controls.target.copy(center);
+                this.controls.update();
+            }
+
+            onWindowResize() {
+                const { clientWidth, clientHeight } = this.viewerContainer;
+                if (clientWidth === 0 || clientHeight === 0) return;
+                this.camera.aspect = clientWidth / clientHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(clientWidth, clientHeight);
+            }
+
+            animate = () => {
+                requestAnimationFrame(this.animate);
+                this.controls.update();
+                if (this.renderer.domElement.isConnected) {
+                    this.renderer.render(this.scene, this.camera);
+                }
+            }
+
+            // --- ANNOTATION METHODS ---
+            // (All annotation methods remain the same)
+            createRandomAnnotations(object, count) {
+                 const vertices = [];
+                object.traverse(child => {
+                    if (child.isMesh) {
+                        const geometry = child.geometry;
+                        if (geometry.attributes.position) {
+                            const positionAttribute = geometry.attributes.position;
+                            for (let i = 0; i < positionAttribute.count; i++) {
+                                const vertex = new THREE.Vector3();
+                                vertex.fromBufferAttribute(positionAttribute, i);
+                                child.localToWorld(vertex);
+                                vertices.push(vertex);
+                            }
+                        }
+                    }
+                });
+
+                if (vertices.length === 0) return;
+
+                for (let i = 0; i < count; i++) {
+                    const randomIndex = Math.floor(Math.random() * vertices.length);
+                    const position = vertices[randomIndex];
+                    const text = `This is annotation #${i + 1}. It points to a specific feature on the model, providing more details.`;
+                    this.addAnnotation({ position, text });
+                }
+            }
+            addAnnotation(data) {
+                this.annotations.push(data);
+                
+                const sphereSize = this.modelSize * 0.02;
+                const geometry = new THREE.SphereGeometry(sphereSize, 16, 16);
+                const material = new THREE.MeshBasicMaterial({ 
+                    color: 0x3498db,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const sphere = new THREE.Mesh(geometry, material);
+                sphere.position.copy(data.position);
+                sphere.userData.annotationIndex = this.annotations.length - 1;
+                sphere.visible = false;
+
+                this.scene.add(sphere);
+                this.annotationSpheres.push(sphere);
+            }
+            clearAnnotations() {
+                this.annotationSpheres.forEach(sphere => this.scene.remove(sphere));
+                this.annotationSpheres = [];
+                this.annotations = [];
+                this.hideAnnotationCallout();
+            }
+            setAnnotationSpheresVisible(isVisible) {
+                this.annotationSpheres.forEach(sphere => sphere.visible = isVisible);
+            }
+            showAnnotationCallout(annotation, sphere) {
+                this.isCalloutVisible = true;
+                this.annotationCallout.textContent = annotation.text;
+                this.annotationCallout.style.visibility = 'visible';
+                this.annotationCallout.style.opacity = 1;
+
+                this.connectorSVG.style.visibility = 'visible';
+                const calloutRect = this.annotationCallout.getBoundingClientRect();
+                const containerRect = this.viewerContainer.getBoundingClientRect();
+                
+                const toX = calloutRect.left - containerRect.left;
+                const toY = calloutRect.top - containerRect.top + (calloutRect.height / 2);
+
+                const screenPosition = sphere.position.clone().project(this.camera);
+                const fromX = (screenPosition.x * .5 + .5) * this.renderer.domElement.clientWidth;
+                const fromY = (screenPosition.y * -.5 + .5) * this.renderer.domElement.clientHeight;
+
+                this.connectorLine.setAttribute('x1', fromX);
+                this.connectorLine.setAttribute('y1', fromY);
+                this.connectorLine.setAttribute('x2', toX);
+                this.connectorLine.setAttribute('y2', toY);
+            }
+            hideAnnotationCallout() {
+                if (!this.isCalloutVisible) return;
+                this.isCalloutVisible = false;
+                this.annotationCallout.style.visibility = 'hidden';
+                this.annotationCallout.style.opacity = 0;
+                this.connectorSVG.style.visibility = 'hidden';
+            }
+            onCanvasClick = (event) => {
+                 if (window.currentlyExpandedViewer !== this || this.isDragging) return;
+
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.annotationSpheres);
+
+                if (intersects.length > 0) {
+                    const clickedSphere = intersects[0].object;
+                    const annotationIndex = clickedSphere.userData.annotationIndex;
+                    const annotation = this.annotations[annotationIndex];
+                    this.showAnnotationCallout(annotation, clickedSphere);
+                } else {
+                    this.hideAnnotationCallout();
+                }
+            }
+        }
+        
+        // --- INITIALIZE GALLERY ---
+        window.currentlyExpandedViewer = null;
+        const viewers = [];
+        for (let i = 0; i < assetDirectoryNames.length; i++) {
+            const dirName = assetDirectoryNames[i];
+            const card = document.createElement('div');
+            card.className = 'viewer-card bg-gray-800 rounded-lg shadow-lg overflow-hidden';
+            galleryGrid.appendChild(card);
+            const viewer = new AssetViewer(card, i);
+            viewer.loadFromDirectory(dirName);
+            viewers.push(viewer);
+        }
+
+        document.getElementById('back-to-gallery').addEventListener('click', () => {
+            if (window.currentlyExpandedViewer) {
+                window.currentlyExpandedViewer.collapse();
+                window.currentlyExpandedViewer = null;
+            }
+        });
+
+    </script>
+</body>
+</html>
+

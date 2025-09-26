@@ -1,0 +1,1 @@
+This abstract sculpture presents a captivating, spiky form meticulously crafted from numerous small wooden cubes, resting on a simple dark base.
