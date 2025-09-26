@@ -17,7 +17,7 @@
         .viewer-card {
             display: flex;
             flex-direction: column;
-            height: 450px;
+            aspect-ratio: 3/4;
         }
         .viewer-container {
             flex-grow: 1;
@@ -33,6 +33,12 @@
             left: 0;
             width: 100%;
             height: 100%;
+        }
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
         .annotation-callout {
             position: absolute;
@@ -71,18 +77,18 @@
         <p class="text-lg text-gray-400 text-center mt-2">A curated collection of 3D models.</p>
     </div>
 
-    <div id="gallery-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+    <div id="gallery-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <!-- Viewer instances will be injected here by JavaScript -->
     </div>
 
     <!-- Fullscreen Modal for Expanded View -->
     <div id="fullscreen-modal" class="hidden fixed inset-0 bg-gray-900 z-50 flex flex-col">
-        <div class="flex-shrink-0 p-4 flex justify-end">
-            <button id="back-to-gallery" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+        <div class="absolute top-4 left-4 z-10">
+            <button id="back-to-gallery" class="text-gray-400 hover:text-white text-xs tracking-wider transition-colors duration-200">
                 Back to Gallery
             </button>
         </div>
-        <div id="fullscreen-container" class="w-full flex-grow relative flex"></div>
+        <div id="fullscreen-container" class="w-full h-full relative flex"></div>
         <div id="fullscreen-info" class="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 via-black/50 to-transparent pointer-events-none">
             <h2 id="fullscreen-title" class="text-2xl font-bold text-white"></h2>
             <p id="fullscreen-description" class="text-base text-gray-300 mt-1"></p>
@@ -103,10 +109,8 @@
         // The gallery will be populated by looking for subdirectories with these names inside the 'assets/' folder.
         // The viewers will be populated in this order.
         const assetDirectoryNames = [
-            'cubic_explosion',
-        ];
-
-        const galleryGrid = document.getElementById('gallery-grid');
+            'cubic_explosion'
+        ];        const galleryGrid = document.getElementById('gallery-grid');
 
         class AssetViewer {
             constructor(containerElement, id) {
@@ -127,9 +131,11 @@
             createDOM() {
                 this.viewerContainer = document.createElement('div');
                 this.viewerContainer.className = 'viewer-container';
+
                 this.annotationCallout = document.createElement('div');
                 this.annotationCallout.className = 'annotation-callout';
                 this.viewerContainer.appendChild(this.annotationCallout);
+
                 this.connectorSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 this.connectorSVG.classList.add('annotation-connector');
                 this.connectorLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -139,27 +145,35 @@
                 this.viewerContainer.appendChild(this.connectorSVG);
 
                 const infoContainer = document.createElement('div');
-                infoContainer.className = 'p-4';
+                infoContainer.className = 'p-4 bg-gray-800';
+
                 this.titleEl = document.createElement('h3');
-                this.titleEl.className = 'text-lg font-bold text-white truncate';
+                this.titleEl.className = 'text-lg font-bold text-white';
                 this.titleEl.textContent = `Asset Slot ${this.id + 1}`;
+
                 this.descriptionEl = document.createElement('p');
-                this.descriptionEl.className = 'text-sm text-gray-400 h-10 overflow-hidden';
+                this.descriptionEl.className = 'text-sm text-gray-400 mt-2 line-clamp-2';
                 this.descriptionEl.textContent = '...';
                 
-                const controlsContainer = document.createElement('div');
-                controlsContainer.className = 'flex gap-2 mt-3 items-center';
                 this.expandBtn = document.createElement('button');
-                this.expandBtn.className = 'file-input-label bg-cyan-600 hover:bg-cyan-500 text-white ml-auto';
+                this.expandBtn.className = 'text-gray-400 hover:text-white transition-colors duration-200 absolute top-4 right-4 z-10 text-xs tracking-wider';
+                this.expandBtn.title = 'View in fullscreen';
                 this.expandBtn.textContent = 'Expand';
-                controlsContainer.appendChild(this.expandBtn);
+                this.expandBtn.style.textTransform = 'none';
+                this.expandBtn.innerHTML = 'E<span style="text-transform: lowercase">xpand</span>';
+                this.viewerContainer.appendChild(this.expandBtn);
 
                 infoContainer.appendChild(this.titleEl);
                 infoContainer.appendChild(this.descriptionEl);
-                infoContainer.appendChild(controlsContainer);
 
-                this.container.appendChild(this.viewerContainer);
-                this.container.appendChild(infoContainer);
+                // Create the main card container
+                const card = document.createElement('div');
+                card.className = 'viewer-card';
+                card.appendChild(this.viewerContainer);
+                card.appendChild(infoContainer);
+
+                // Add the card to the container
+                this.container.appendChild(card);
             }
             
             init() {
@@ -194,69 +208,126 @@
             }
 
             async loadFromDirectory(dirName) {
-                const basePath = `assets/${dirName}`;
                 try {
-                    this.descriptionEl.textContent = 'Loading info...';
-                    // Fetch markdown files first
-                    const titleResponse = await fetch(`${basePath}/title.md`);
-                    if (!titleResponse.ok) throw new Error(`'title.md' not found`);
-                    const title = await titleResponse.text();
-
-                    const descResponse = await fetch(`${basePath}/description.md`);
-                    if (!descResponse.ok) throw new Error(`'description.md' not found`);
-                    const description = await descResponse.text();
-
-                    this.titleEl.textContent = title.trim();
-                    this.descriptionEl.textContent = description.trim();
+                    console.log('Loading directory:', dirName);
+                    this.titleEl.textContent = 'Loading...';
+                    this.descriptionEl.textContent = 'Please wait while the 3D model loads...';
                     
-                    // Now load the 3D model
-                    this.descriptionEl.textContent = 'Loading model...';
-                    const mtlPath = `${basePath}/model.mtl`;
-                    const objPath = `${basePath}/model.obj`;
-                    this.loadAssetFromURLs({ obj: objPath, mtl: mtlPath });
+                    const baseUrl = `assets/${dirName}/`;
+                    console.log(`Loading assets from ${baseUrl}`);
+                    
+                    // Store the texts we'll need later
+                    let finalTitle = '';
+                    let finalDescription = '';
+                    
+                    try {
+                        // First load the metadata files
+                        const [titleText, descriptionText] = await Promise.all([
+                            fetch(`${baseUrl}title.md`)
+                                .then(r => {
+                                    if (!r.ok) throw new Error(`Failed to load title: ${r.status}`);
+                                    return r.text();
+                                }),
+                            fetch(`${baseUrl}description.md`)
+                                .then(r => {
+                                    if (!r.ok) throw new Error(`Failed to load description: ${r.status}`);
+                                    return r.text();
+                                })
+                        ]);
+                        
+                        finalTitle = titleText.trim();
+                        finalDescription = descriptionText.trim();
+                        
+                        // Update the text immediately after loading metadata
+                        this.titleEl.textContent = finalTitle;
+                        this.descriptionEl.textContent = finalDescription;
+                        
+                    } catch (error) {
+                        console.error('Error loading metadata:', error);
+                        finalTitle = 'Failed to load title';
+                        finalDescription = 'Failed to load description';
+                        this.titleEl.textContent = finalTitle;
+                        this.descriptionEl.textContent = finalDescription;
+                    }
 
+                    // Then load the 3D model
+                    await this.loadAssetFromURLs({
+                        obj: `${baseUrl}3DModel.obj`,
+                        mtl: `${baseUrl}3DModel.mtl`
+                    });
+                    
+                    // Ensure the text is still correct after model loads
+                    this.titleEl.textContent = finalTitle;
+                    this.descriptionEl.textContent = finalDescription;
+                    
+                    console.log(`Successfully loaded all assets for ${dirName}`);
                 } catch (error) {
-                    this.titleEl.textContent = `Slot ${this.id + 1}: Error`;
-                    this.descriptionEl.textContent = `Failed to load asset from '${dirName}'. Check console.`;
-                    console.error(`Error loading asset from directory '${dirName}':`, error.message);
+                    console.error(`Error loading assets for ${dirName}:`, error);
+                    this.titleEl.textContent = 'Error Loading Asset';
+                    this.descriptionEl.textContent = 'Failed to load 3D model and assets. Please check the console for details.';
                 }
             }
 
             loadAssetFromURLs({ obj, mtl }) {
-                this.clearAnnotations();
-                if (this.currentObject) this.scene.remove(this.currentObject);
-
-                const manager = new THREE.LoadingManager();
-                const mtlLoader = new MTLLoader(manager);
-                const objLoader = new OBJLoader(manager);
-
-                const mtlURL = new URL(mtl, window.location.href).href;
-                const objURL = new URL(obj, window.location.href).href;
-
-                const resourcePath = mtlURL.substring(0, mtlURL.lastIndexOf('/') + 1);
-                mtlLoader.setPath(resourcePath);
-                
-                mtlLoader.load(mtlURL, (materials) => {
-                    materials.preload();
-                    objLoader.setMaterials(materials);
-                    objLoader.load(objURL, (object) => {
-                        this.currentObject = object;
-                        this.frameObject(object);
-                        this.scene.add(object);
-                        this.createRandomAnnotations(object, 3);
-                        this.descriptionEl.textContent = this.descriptionEl.textContent; // Keep loaded description
-                    }, null, (error) => { throw new Error('model.obj could not be loaded.'); });
-                }, null, (error) => { throw new Error('model.mtl could not be loaded, or it references a missing texture.'); });
+                return new Promise((resolve, reject) => {
+                    console.log('Starting to load 3D model assets...');
+                    
+                    const mtlLoader = new MTLLoader();
+                    mtlLoader.load(
+                        mtl,
+                        (materials) => {
+                            console.log('Material loaded successfully');
+                            materials.preload();
+                            const objLoader = new OBJLoader();
+                            objLoader.setMaterials(materials);
+                            
+                            objLoader.load(
+                                obj,
+                                (object) => {
+                                    console.log('3D model loaded successfully');
+                                    if (this.currentObject) {
+                                        this.scene.remove(this.currentObject);
+                                    }
+                                    this.currentObject = object;
+                                    this.scene.add(object);
+                                    this.frameObject(object);
+                                    this.createRandomAnnotations(object, 3);
+                                    resolve();
+                                },
+                                (xhr) => {
+                                    // Only update loading progress in the console
+                                    const percent = (xhr.loaded / xhr.total * 100).toFixed(1);
+                                    console.log(`Loading 3D model... ${percent}%`);
+                                },
+                                (error) => {
+                                    console.error('Error loading OBJ:', error);
+                                    reject(error);
+                                }
+                            );
+                        },
+                        (xhr) => {
+                            const percent = (xhr.loaded / xhr.total * 100).toFixed(1);
+                            this.descriptionEl.textContent = `Loading materials... ${percent}%`;
+                        },
+                        (error) => {
+                            console.error('Error loading MTL:', error);
+                            reject(error);
+                        }
+                    );
+                });
             }
             
             expand() {
-                // (Expand/collapse logic remains the same)
                 const fullscreenContainer = document.getElementById('fullscreen-container');
                 const fullscreenModal = document.getElementById('fullscreen-modal');
                 const fsTitle = document.getElementById('fullscreen-title');
                 const fsDesc = document.getElementById('fullscreen-description');
                 fsTitle.textContent = this.titleEl.textContent;
                 fsDesc.textContent = this.descriptionEl.textContent;
+                
+                // Hide expand button when expanded
+                this.expandBtn.style.display = 'none';
+                
                 fullscreenContainer.appendChild(this.viewerContainer);
                 fullscreenModal.classList.remove('hidden');
                 galleryGrid.classList.add('hidden');
@@ -272,6 +343,10 @@
                 galleryGrid.classList.remove('hidden');
                 this.setAnnotationSpheresVisible(false);
                 this.hideAnnotationCallout();
+                
+                // Show expand button when collapsed
+                this.expandBtn.style.display = '';
+                
                 setTimeout(() => this.onWindowResize(), 50);
             }
 
@@ -413,12 +488,17 @@
         // --- INITIALIZE GALLERY ---
         window.currentlyExpandedViewer = null;
         const viewers = [];
+        
+        // Clear any existing content
+        galleryGrid.innerHTML = '';
+        
+        // Create one viewer for each asset directory
         for (let i = 0; i < assetDirectoryNames.length; i++) {
             const dirName = assetDirectoryNames[i];
-            const card = document.createElement('div');
-            card.className = 'viewer-card bg-gray-800 rounded-lg shadow-lg overflow-hidden';
-            galleryGrid.appendChild(card);
-            const viewer = new AssetViewer(card, i);
+            const cardContainer = document.createElement('div');
+            cardContainer.className = 'rounded-lg shadow-lg overflow-hidden';
+            galleryGrid.appendChild(cardContainer);
+            const viewer = new AssetViewer(cardContainer, i);
             viewer.loadFromDirectory(dirName);
             viewers.push(viewer);
         }
