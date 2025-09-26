@@ -68,6 +68,37 @@
             visibility: hidden;
             overflow: visible;
         }
+        
+        /* Context Menu Styles */
+        #context-menu {
+            position: fixed;
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 0.5rem 0;
+            min-width: 160px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        
+        #context-menu.hidden {
+            display: none;
+        }
+        
+        #context-menu button {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            text-align: left;
+            font-size: 0.875rem;
+            color: #d1d5db;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        
+        #context-menu button:hover {
+            background-color: #374151;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 p-4 sm:p-6 lg:p-8">
@@ -79,6 +110,13 @@
 
     <div id="gallery-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <!-- Viewer instances will be injected here by JavaScript -->
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="hidden">
+        <button id="add-annotation">
+            Add annotation
+        </button>
     </div>
 
     <!-- Fullscreen Modal for Expanded View -->
@@ -122,6 +160,8 @@
                 this.modelSize = 1;
                 this.isCalloutVisible = false;
                 this.isDragging = false;
+                this.lastIntersection = null;
+                this.isExpanded = false;
                 this.createDOM();
                 this.init();
                 this.addEventListeners();
@@ -129,9 +169,14 @@
             }
 
             createDOM() {
+                // Create the main card container (using the existing container)
+                this.container.className = 'viewer-card bg-gray-800 rounded-lg overflow-hidden';
+
+                // Create viewer container for the 3D content
                 this.viewerContainer = document.createElement('div');
                 this.viewerContainer.className = 'viewer-container';
 
+                // Create annotation elements
                 this.annotationCallout = document.createElement('div');
                 this.annotationCallout.className = 'annotation-callout';
                 this.viewerContainer.appendChild(this.annotationCallout);
@@ -144,8 +189,16 @@
                 this.connectorSVG.appendChild(this.connectorLine);
                 this.viewerContainer.appendChild(this.connectorSVG);
 
+                // Create expand button
+                this.expandBtn = document.createElement('button');
+                this.expandBtn.className = 'text-gray-400 hover:text-white transition-colors duration-200 absolute top-4 right-4 z-10 text-xs tracking-wider';
+                this.expandBtn.title = 'View in fullscreen';
+                this.expandBtn.innerHTML = 'E<span style="text-transform: lowercase">xpand</span>';
+                this.viewerContainer.appendChild(this.expandBtn);
+
+                // Create info section
                 const infoContainer = document.createElement('div');
-                infoContainer.className = 'p-4 bg-gray-800';
+                infoContainer.className = 'p-4';
 
                 this.titleEl = document.createElement('h3');
                 this.titleEl.className = 'text-lg font-bold text-white';
@@ -154,26 +207,13 @@
                 this.descriptionEl = document.createElement('p');
                 this.descriptionEl.className = 'text-sm text-gray-400 mt-2 line-clamp-2';
                 this.descriptionEl.textContent = '...';
-                
-                this.expandBtn = document.createElement('button');
-                this.expandBtn.className = 'text-gray-400 hover:text-white transition-colors duration-200 absolute top-4 right-4 z-10 text-xs tracking-wider';
-                this.expandBtn.title = 'View in fullscreen';
-                this.expandBtn.textContent = 'Expand';
-                this.expandBtn.style.textTransform = 'none';
-                this.expandBtn.innerHTML = 'E<span style="text-transform: lowercase">xpand</span>';
-                this.viewerContainer.appendChild(this.expandBtn);
 
                 infoContainer.appendChild(this.titleEl);
                 infoContainer.appendChild(this.descriptionEl);
 
-                // Create the main card container
-                const card = document.createElement('div');
-                card.className = 'viewer-card';
-                card.appendChild(this.viewerContainer);
-                card.appendChild(infoContainer);
-
-                // Add the card to the container
-                this.container.appendChild(card);
+                // Add everything to the container
+                this.container.appendChild(this.viewerContainer);
+                this.container.appendChild(infoContainer);
             }
             
             init() {
@@ -198,13 +238,48 @@
             }
 
             addEventListeners() {
+                // Bind all event handlers to maintain 'this' context
+                this.onContextMenuBound = this.onContextMenu.bind(this);
+                this.onCanvasClickBound = this.onCanvasClick.bind(this);
+                
                 this.expandBtn.addEventListener('click', () => this.expand());
-                this.renderer.domElement.addEventListener('click', this.onCanvasClick);
+                this.renderer.domElement.addEventListener('click', this.onCanvasClickBound);
+                
+                // Add context menu listeners to both container and canvas
+                this.viewerContainer.addEventListener('contextmenu', this.onContextMenuBound);
+                this.renderer.domElement.addEventListener('contextmenu', this.onContextMenuBound);
+                
+                console.log('Added context menu listeners to:', {
+                    container: this.viewerContainer,
+                    canvas: this.renderer.domElement
+                });
+                
                 this.controls.addEventListener('start', () => {
                     this.isDragging = false;
                     this.hideAnnotationCallout();
                 });
                 this.controls.addEventListener('change', () => { this.isDragging = true; });
+
+                // Hide context menu on any click outside
+                document.addEventListener('click', () => {
+                    const contextMenu = document.getElementById('context-menu');
+                    contextMenu.classList.add('hidden');
+                });
+
+                // Handle "Add annotation" click
+                document.getElementById('add-annotation').addEventListener('click', () => {
+                    if (this.lastIntersection) {
+                        const point = this.lastIntersection.point;
+                        const coords = `x: ${point.x.toFixed(2)}, y: ${point.y.toFixed(2)}, z: ${point.z.toFixed(2)}`;
+                        this.addAnnotation({
+                            position: point,
+                            text: coords
+                        });
+                        this.setAnnotationSpheresVisible(true);
+                        const contextMenu = document.getElementById('context-menu');
+                        contextMenu.classList.add('hidden');
+                    }
+                });
             }
 
             async loadFromDirectory(dirName) {
@@ -332,6 +407,7 @@
                 fullscreenModal.classList.remove('hidden');
                 galleryGrid.classList.add('hidden');
                 window.currentlyExpandedViewer = this;
+                this.isExpanded = true;
                 this.setAnnotationSpheresVisible(true);
                 setTimeout(() => this.onWindowResize(), 50);
             }
@@ -346,6 +422,26 @@
                 
                 // Show expand button when collapsed
                 this.expandBtn.style.display = '';
+                this.isExpanded = false;
+                
+                // Hide context menu if visible
+                const contextMenu = document.getElementById('context-menu');
+                contextMenu.classList.add('hidden');
+                
+                // Reset camera and controls to initial state
+                if (this.currentObject) {
+                    const box = new THREE.Box3().setFromObject(this.currentObject);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    this.modelSize = Math.max(size.x, size.y, size.z);
+                    const fov = this.camera.fov * (Math.PI / 180);
+                    let cameraZ = Math.abs(this.modelSize / 2 / Math.tan(fov / 2)) * 1.8;
+                    this.camera.position.copy(center);
+                    this.camera.position.z += cameraZ;
+                    this.camera.rotation.set(0, 0, 0);
+                    this.controls.target.copy(center);
+                    this.controls.update();
+                }
                 
                 setTimeout(() => this.onWindowResize(), 50);
             }
@@ -465,7 +561,7 @@
                 this.connectorSVG.style.visibility = 'hidden';
             }
             onCanvasClick = (event) => {
-                 if (window.currentlyExpandedViewer !== this || this.isDragging) return;
+                if (window.currentlyExpandedViewer !== this || this.isDragging) return;
 
                 const rect = this.renderer.domElement.getBoundingClientRect();
                 this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -481,6 +577,49 @@
                     this.showAnnotationCallout(annotation, clickedSphere);
                 } else {
                     this.hideAnnotationCallout();
+                }
+            }
+
+            onContextMenu = (event) => {
+                console.log('Context menu event triggered', {
+                    event: event,
+                    eventTarget: event.target,
+                    isExpanded: this.isExpanded,
+                    isDragging: this.isDragging,
+                    mouseX: event.clientX,
+                    mouseY: event.clientY
+                });
+                
+                // Prevent default context menu
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // Only handle right-click in expanded view
+                if (!this.isExpanded) {
+                    console.log('Not showing menu - viewer not expanded');
+                    return;
+                }
+
+                const menu = document.getElementById('context-menu');
+                console.log('Context menu element:', menu);
+                
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const modelIntersects = this.raycaster.intersectObject(this.currentObject, true);
+                console.log('Model intersections:', modelIntersects);
+
+                if (modelIntersects.length > 0) {
+                    this.lastIntersection = modelIntersects[0];
+                    menu.style.left = event.pageX + 'px';
+                    menu.style.top = event.pageY + 'px';
+                    menu.classList.remove('hidden');
+                    console.log('Showing menu at:', { x: event.pageX, y: event.pageY });
+                } else {
+                    menu.classList.add('hidden');
+                    console.log('No intersection found - hiding menu');
                 }
             }
         }
