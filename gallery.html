@@ -150,7 +150,8 @@
         // The gallery will be populated by looking for subdirectories with these names inside the 'assets/' folder.
         // The viewers will be populated in this order.
         const assetDirectoryNames = [
-            'cubic_explosion'
+            'cubic_explosion',
+            'labubu',
         ];        const galleryGrid = document.getElementById('gallery-grid');
 
         class AssetViewer {
@@ -281,22 +282,17 @@
                             z: Number(point.z.toFixed(4)),
                             annotation: "Description goes here"
                         };
-                        
-                        // Create and add the annotation
+                        // Store the full JSON and a flag
                         const annotation = {
                             position: point,
-                            text: annotationJson.annotation
+                            text: annotationJson.annotation,
+                            fullJson: annotationJson,
+                            isUser: true
                         };
                         this.addAnnotation(annotation);
-                        
-                        // Get the newly added sphere (it will be the last one)
                         const newSphere = this.annotationSpheres[this.annotationSpheres.length - 1];
-                        
-                        // Show all annotation spheres and the callout for the new one
                         this.setAnnotationSpheresVisible(true);
                         this.showAnnotationCallout(annotation, newSphere);
-                        
-                        // Hide the context menu
                         const contextMenu = document.getElementById('context-menu');
                         contextMenu.classList.add('hidden');
                     }
@@ -365,7 +361,8 @@
                         annotations.forEach(ann => {
                             this.addAnnotation({
                                 position: new THREE.Vector3(ann.x, ann.y, ann.z),
-                                text: ann.annotation
+                                text: ann.annotation,
+                                isUser: false
                             });
                         });
                     }
@@ -572,21 +569,22 @@
             }
             showAnnotationCallout(annotation, sphere) {
                 this.isCalloutVisible = true;
-                this.annotationCallout.textContent = annotation.text;
+                // Show full JSON for user-added, just text for loaded
+                if (annotation.isUser && annotation.fullJson) {
+                    this.annotationCallout.textContent = JSON.stringify(annotation.fullJson, null, 2);
+                } else {
+                    this.annotationCallout.textContent = annotation.text;
+                }
                 this.annotationCallout.style.visibility = 'visible';
                 this.annotationCallout.style.opacity = 1;
-
                 this.connectorSVG.style.visibility = 'visible';
                 const calloutRect = this.annotationCallout.getBoundingClientRect();
                 const containerRect = this.viewerContainer.getBoundingClientRect();
-                
                 const toX = calloutRect.left - containerRect.left;
                 const toY = calloutRect.top - containerRect.top + (calloutRect.height / 2);
-
                 const screenPosition = sphere.position.clone().project(this.camera);
                 const fromX = (screenPosition.x * .5 + .5) * this.renderer.domElement.clientWidth;
                 const fromY = (screenPosition.y * -.5 + .5) * this.renderer.domElement.clientHeight;
-
                 this.connectorLine.setAttribute('x1', fromX);
                 this.connectorLine.setAttribute('y1', fromY);
                 this.connectorLine.setAttribute('x2', toX);
