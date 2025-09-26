@@ -115,7 +115,7 @@
     <!-- Context Menu -->
     <div id="context-menu" class="hidden">
         <button id="add-annotation">
-            Add annotation
+            Add marker
         </button>
     </div>
 
@@ -179,6 +179,8 @@
                 // Create annotation elements
                 this.annotationCallout = document.createElement('div');
                 this.annotationCallout.className = 'annotation-callout';
+                
+                // Add elements to container
                 this.viewerContainer.appendChild(this.annotationCallout);
 
                 this.connectorSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -210,7 +212,7 @@
 
                 infoContainer.appendChild(this.titleEl);
                 infoContainer.appendChild(this.descriptionEl);
-
+                
                 // Add everything to the container
                 this.container.appendChild(this.viewerContainer);
                 this.container.appendChild(infoContainer);
@@ -575,6 +577,10 @@
                     const annotationIndex = clickedSphere.userData.annotationIndex;
                     const annotation = this.annotations[annotationIndex];
                     this.showAnnotationCallout(annotation, clickedSphere);
+                    
+                    // Copy coordinates to clipboard
+                    navigator.clipboard.writeText(annotation.text)
+                        .catch(err => console.error('Failed to copy coordinates:', err));
                 } else {
                     this.hideAnnotationCallout();
                 }
