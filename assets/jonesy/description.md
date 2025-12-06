@@ -1,5 +1,6 @@
-Artemis Rage, 2025
-Lego and Sweat
+Artemis Rage, 2025.
+
+Lego and Sweat.
 
 This robot was lovingly constructed by Artemis Rage. It is small, but it is strong.
 
