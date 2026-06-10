@@ -1,0 +1,30 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "Artemis Natural History Museum" [level=1] [ref=e3]
+    - paragraph [ref=e4]: Selected 21st century artifacts.
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - button "Expand" [ref=e8] [cursor=pointer]
+      - generic [ref=e10]:
+        - heading "Figure of the Bearer" [level=3] [ref=e11]
+        - paragraph [ref=e12]: Loading materials... 100.0%
+    - generic [ref=e13]:
+      - button "Expand" [ref=e15] [cursor=pointer]
+      - generic [ref=e17]:
+        - heading "Cubic Explosion" [level=3] [ref=e18]
+        - paragraph [ref=e19]: Loading materials... 100.0%
+    - generic [ref=e20]:
+      - button "Expand" [ref=e22] [cursor=pointer]
+      - generic [ref=e24]:
+        - heading "Labubu" [level=3] [ref=e25]
+        - paragraph [ref=e26]: Loading materials... 100.0%
+    - generic [ref=e27]:
+      - button "Expand" [ref=e29] [cursor=pointer]
+      - generic [ref=e31]:
+        - heading "Ceramic Bird Cage" [level=3] [ref=e32]
+        - paragraph [ref=e33]: Loading materials... 100.0%
+    - generic [ref=e34]:
+      - button "Expand" [ref=e36] [cursor=pointer]
+      - generic [ref=e38]:
+        - heading "Jonesy D. Robot" [level=3] [ref=e39]
+        - paragraph [ref=e40]: Loading materials... 100.0%
